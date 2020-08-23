@@ -1,0 +1,98 @@
+---
+title: "Final Assignment - PM Course"
+date: "8/23/2020"
+output: html_document
+---
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. The goal of this project is to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants as they perform barbell lifts correctly and incorrectly 5 different ways.
+
+The data for this project come from this source <http://groupware.les.inf.puc-rio.br/har>. The training data for this project are available at <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+and the test data are available at <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>.
+
+## Analysis
+All the required packages are loaded in R. 
+```{r, echo = TRUE, warning =  FALSE, message = FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(e1071)
+library(randomForest)
+```
+
+The seed is set in order to allow the reproducibility of the results.
+
+```{r, echo = TRUE}
+set.seed(1)
+```
+
+Data are firstly downloaded. 
+```{r, echo = TRUE}
+train_url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+test_url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+
+train_file <- file.path(paste(getwd(), '/', sep = ''), 'machine-train-data.csv')
+download.file(train_url, destfile = train_file)
+
+test_file <- file.path(paste(getwd(), '/', sep = ''), 'machine-test-data.csv')
+download.file(test_url, destfile = test_file)
+```
+
+Then data are uploaded in R (missing data are marked alternatively as 'NA', '#DIV/0!' and '')
+```{r, echo = TRUE}
+train_data <- read.csv(train_file, na.strings = c('NA', '#DIV/0!', ''))
+test_data <- read.csv(test_file, na.strings = c('NA', '#DIV/0!', ''))
+```
+
+Data are cleaned in order to remove columns with NA values. Moreover, unuseful columns are also removed.  
+```{r, echo = TRUE}
+train_data <- train_data[, !apply(train_data, 2, anyNA)] 
+test_data <- test_data[, !apply(test_data, 2, anyNA)] 
+train_data <- train_data[, -c(1:7)]
+test_data <- test_data[, -c(1:7)]
+```
+
+The training data set is divided into two sets: the training set (with 60% of the data) wand the validation set (with the remaining 40% of the data).
+```{r, echo = TRUE}
+in_training <- createDataPartition(train_data$classe, p = 0.60, list = FALSE)
+train_data <- train_data[in_training, ]
+validation_data <- train_data[-in_training, ]
+```
+
+Now, the training data set is used in order to fit a Random Forest model. 
+```{r, echo = TRUE}
+ctrl_parms <- trainControl(method = 'cv', 5)
+rf_model <- train(classe ~ ., data = train_data, method = 'rf', trControl = ctrl_parms, ntree = 10)
+print(rf_model)
+```
+
+Then model fit is tested against the validation data. 
+```{r, echo = TRUE}
+rf_pred <- predict(rf_model, validation_data)
+print(confusionMatrix(as.factor(validation_data$classe), rf_pred))
+```
+
+```{r, echo = TRUE}
+accuracy <- postResample(rf_pred, as.factor(validation_data$classe))
+accuracy_out <- accuracy[1]
+
+overall_out <- 1 - as.numeric(confusionMatrix(as.factor(validation_data$classe), rf_pred)$overall[1])
+```
+
+Finally, the model is applied to the test data and the result is printed.
+```{r, echo = TRUE}
+result <- predict(rf_model, test_data[, -length(names(test_data))])
+print(result)
+```
+
+Below the decision tree visualization. 
+```{r, echo = TRUE, warning =  FALSE}
+tree_model <- rpart(classe ~ ., data = train_data, method = 'class')
+fancyRpartPlot(tree_model)
+```
+
+
+
